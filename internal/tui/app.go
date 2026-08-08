@@ -7,10 +7,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/dharuncs/novel/internal/core"
 	"github.com/dharuncs/novel/internal/source"
+	"github.com/dharuncs/novel/internal/storage"
 	"github.com/dharuncs/novel/internal/tui/chapterlist"
 	"github.com/dharuncs/novel/internal/tui/library"
 	"github.com/dharuncs/novel/internal/tui/reader"
 	"github.com/dharuncs/novel/internal/tui/search"
+	"github.com/dharuncs/novel/internal/tui/settings"
 )
 
 type AppModel struct {
@@ -19,16 +21,19 @@ type AppModel struct {
 	progressMgr    *core.ProgressManager
 	statsManager   *core.StatsManager
 	registry       *source.Registry
+	db             *storage.DB
 
 	libraryModel     library.Model
 	readerModel      reader.Model
 	searchModel      search.Model
 	chapterListModel chapterlist.Model
+	settingsModel    settings.Model
 
-	width     int
-	height    int
-	statusMsg string
-	err       error
+	userSettings storage.UserSettings
+	width        int
+	height       int
+	statusMsg    string
+	err          error
 
 	activeNovelID string
 }
@@ -38,6 +43,7 @@ func NewAppModel(
 	pm *core.ProgressManager,
 	sm *core.StatsManager,
 	reg *source.Registry,
+	db *storage.DB,
 ) AppModel {
 	var initialPlugin *source.Plugin
 	if reg != nil {
@@ -51,16 +57,32 @@ func NewAppModel(
 		searchM = searchM.SetPlugin(initialPlugin)
 	}
 
+	userSet := storage.UserSettings{
+		Theme:         "dark",
+		LineWidth:     80,
+		AutoSaveEvery: 5,
+	}
+	if db != nil {
+		if s, err := db.GetSettings(); err == nil {
+			userSet = s
+		}
+	}
+
+	settingsM := settings.New().SetSettings(userSet)
+
 	return AppModel{
 		state:            ViewLibrary,
 		libraryManager:   lm,
 		progressMgr:      pm,
 		statsManager:     sm,
 		registry:         reg,
+		db:               db,
 		libraryModel:     library.New(),
 		readerModel:      reader.New(),
 		searchModel:      searchM,
 		chapterListModel: chapterlist.New(),
+		settingsModel:    settingsM,
+		userSettings:     userSet,
 	}
 }
 
@@ -88,6 +110,15 @@ func (m AppModel) saveProgressCmd(novelID, chapterID string, pIdx, sOffset, tota
 			totalParas,
 			readSec,
 		)
+		return nil
+	}
+}
+
+func (m AppModel) saveSettingsCmd(set storage.UserSettings) tea.Cmd {
+	return func() tea.Msg {
+		if m.db != nil {
+			_ = m.db.UpdateSettings(set)
+		}
 		return nil
 	}
 }
@@ -182,9 +213,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.readerModel = m.readerModel.SetSize(msg.Width, msg.Height)
 		m.searchModel = m.searchModel.SetSize(msg.Width, msg.Height)
 		m.chapterListModel = m.chapterListModel.SetSize(msg.Width, msg.Height)
+		m.settingsModel = m.settingsModel.SetSize(msg.Width, msg.Height)
 
 	case SwitchViewMsg:
 		m.state = msg.State
+
+	case settings.SaveSettingsMsg:
+		m.userSettings = msg.Settings
+		cmds = append(cmds, m.saveSettingsCmd(msg.Settings))
 
 	case search.AddNovelMsg:
 		m.statusMsg = "Adding novel to library..."
@@ -268,8 +304,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.ParagraphIdx,
 			msg.ScrollOffset,
 			msg.IsNovelComplete,
-			80,
-			5,
+			m.userSettings.LineWidth,
+			m.userSettings.AutoSaveEvery,
 		).SetSize(m.width, m.height)
 		m.state = ViewReader
 
@@ -292,6 +328,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			if m.state == ViewReader {
 				cmds = append(cmds, m.openChapterListCmd(m.activeNovelID))
+			}
+		case ",", "S":
+			if m.state == ViewLibrary {
+				m.state = ViewSettings
+			}
+		case "q", "esc":
+			if m.state == ViewSettings {
+				m.state = ViewLibrary
 			}
 		case "ctrl+c":
 			if m.state == ViewReader {
@@ -323,6 +367,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.chapterListModel, cmd = m.chapterListModel.Update(msg)
 		cmds = append(cmds, cmd)
+
+	case ViewSettings:
+		var cmd tea.Cmd
+		m.settingsModel, cmd = m.settingsModel.Update(msg)
+		cmds = append(cmds, cmd)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -338,6 +387,8 @@ func (m AppModel) View() string {
 		return m.searchModel.View()
 	case ViewChapterList:
 		return m.chapterListModel.View()
+	case ViewSettings:
+		return m.settingsModel.View()
 	default:
 		return "Unknown view"
 	}

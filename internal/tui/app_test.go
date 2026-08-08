@@ -10,6 +10,7 @@ import (
 	"github.com/dharuncs/novel/internal/source"
 	"github.com/dharuncs/novel/internal/storage"
 	"github.com/dharuncs/novel/internal/tui/reader"
+	"github.com/dharuncs/novel/internal/tui/settings"
 )
 
 func unwrapAllMsgs(res tea.Msg) []tea.Msg {
@@ -83,7 +84,7 @@ func setupTestApp(t *testing.T, dbName string) (*storage.DB, AppModel, storage.N
 	sm := core.NewStatsManager(db)
 	reg := source.NewRegistry()
 
-	app := NewAppModel(lm, pm, sm, reg)
+	app := NewAppModel(lm, pm, sm, reg, db)
 	return db, app, novel, chapter
 }
 
@@ -299,6 +300,44 @@ func TestAppModelChapterNavigation(t *testing.T) {
 
 	if loadedNext.Chapter.ID != ch2.ID {
 		t.Errorf("expected loaded chapter ID %q, got %q", ch2.ID, loadedNext.Chapter.ID)
+	}
+}
+
+func TestAppModelPersistence_SettingsRestart(t *testing.T) {
+	db, app, _, _ := setupTestApp(t, "tui_test_settings_restart.db")
+	defer db.Close()
+
+	newSettings := storage.UserSettings{
+		Theme:         "light",
+		LineWidth:     100,
+		AutoSaveEvery: 10,
+	}
+
+	_, cmd := app.Update(settings.SaveSettingsMsg{Settings: newSettings})
+	if cmd != nil {
+		cmd()
+	}
+
+	dbSet, err := db.GetSettings()
+	if err != nil {
+		t.Fatalf("failed to query DB directly for settings: %v", err)
+	}
+	if dbSet.Theme != "light" || dbSet.LineWidth != 100 || dbSet.AutoSaveEvery != 10 {
+		t.Errorf("unexpected settings persisted in DB: %#v", dbSet)
+	}
+
+	lm := core.NewLibraryManager(db)
+	pm := core.NewProgressManager(db)
+	sm := core.NewStatsManager(db)
+	reg := source.NewRegistry()
+
+	restartedApp := NewAppModel(lm, pm, sm, reg, db)
+
+	if restartedApp.userSettings.Theme != "light" {
+		t.Errorf("expected restarted app to load theme 'light', got %q", restartedApp.userSettings.Theme)
+	}
+	if restartedApp.userSettings.LineWidth != 100 {
+		t.Errorf("expected restarted app to load LineWidth 100, got %d", restartedApp.userSettings.LineWidth)
 	}
 }
 

@@ -46,7 +46,7 @@ func main() {
 			pm := core.NewProgressManager(db)
 			sm := core.NewStatsManager(db)
 
-			app := tui.NewAppModel(lm, pm, sm, registry)
+			app := tui.NewAppModel(lm, pm, sm, registry, db)
 			p := tea.NewProgram(app, tea.WithAltScreen())
 			_, err = p.Run()
 			return err

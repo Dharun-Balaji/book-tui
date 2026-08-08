@@ -220,7 +220,7 @@ Files created: [`internal/storage/migrations/001_initial.sql`](./internal/storag
 | **7** | Wire "continue reading" — position restore from DB | ✅ Complete (anchored paragraph seek on load) |
 | **8** | `tui/search/` — search a source, add to library | ✅ Complete & tested |
 | **9** | `tui/chapterlist/` — popup list, jump to chapter | ✅ Complete & tested |
-| 10 | `tui/settings/` + themes | ⬜ Not started |
+| **10** | `tui/settings/` + themes | ✅ Complete & tested (DB persistence verified across restarts) |
 | 11 | Phase 2 features | ⬜ Not started |
 
 ---

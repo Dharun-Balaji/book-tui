@@ -539,5 +539,5 @@ Background work (goroutines → tea.Cmd):
 7. Wire "continue reading" — open novel → restore position from DB ✅
 8. `tui/search/` — search a source, add to library ✅
 9. `tui/chapterlist/` — popup list, jump to chapter ✅
-10. `tui/settings/` + themes
+10. `tui/settings/` + themes — dark/light themes, line width, auto-save interval ✅
 11. Phase 2 features...
