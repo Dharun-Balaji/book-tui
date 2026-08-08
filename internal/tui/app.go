@@ -217,6 +217,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settingsModel = m.settingsModel.SetSize(msg.Width, msg.Height)
 
 	case SwitchViewMsg:
+		m.statusMsg = ""
 		m.state = msg.State
 		if m.state == ViewSearch {
 			m.refreshSearchPlugin()
@@ -232,8 +233,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.addNovelCmd(msg.SourceID, msg.SourceURL))
 
 	case chapterlist.SelectChapterMsg:
+		m.statusMsg = ""
 		m.state = ViewReader
 		cmds = append(cmds, m.fetchChapterCmd(m.activeNovelID, msg.ChapterID, 0, 0, false))
+
+	case OpenNovelMsg:
+		m.statusMsg = ""
+		m.activeNovelID = msg.NovelID
+		cmds = append(cmds, m.openNovelCmd(msg.NovelID))
 
 	case struct {
 		Novel    core.Novel
@@ -281,10 +288,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case LibraryLoadedMsg:
 		m.libraryModel.SetNovels(msg.Novels)
-
-	case OpenNovelMsg:
-		m.activeNovelID = msg.NovelID
-		cmds = append(cmds, m.openNovelCmd(msg.NovelID))
 
 	case struct{ NovelID string }: // Emitted by library item selection
 		m.activeNovelID = msg.NovelID
