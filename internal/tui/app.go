@@ -176,7 +176,7 @@ func (m AppModel) addNovelCmd(sourceID, sourceURL string) tea.Cmd {
 		}
 
 		novel, err := m.libraryManager.AddNovel(context.Background(), plugin, sourceURL, func(status string) {
-			// Status callback
+			// Progress logs can be handled via status bar or channel
 		})
 		if err != nil {
 			return AddNovelErrorMsg{Err: err}
@@ -224,6 +224,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case search.AddNovelMsg:
 		m.statusMsg = "Adding novel to library..."
+		m.state = ViewLibrary
 		cmds = append(cmds, m.addNovelCmd(msg.SourceID, msg.SourceURL))
 
 	case chapterlist.SelectChapterMsg:
@@ -323,6 +324,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "s":
 			if m.state == ViewLibrary {
+				if m.registry != nil {
+					if plugins := m.registry.List(); len(plugins) > 0 {
+						m.searchModel = m.searchModel.SetPlugin(plugins[0])
+					}
+				}
 				m.state = ViewSearch
 			}
 		case "c":

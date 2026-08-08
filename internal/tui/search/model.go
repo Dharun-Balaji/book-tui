@@ -53,14 +53,14 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 }
 
 type Model struct {
-	input      textinput.Model
-	list       list.Model
-	plugin     *source.Plugin
-	searching  bool
-	statusMsg  string
-	err        error
-	width      int
-	height     int
+	input     textinput.Model
+	list      list.Model
+	plugin    *source.Plugin
+	searching bool
+	statusMsg string
+	err       error
+	width     int
+	height    int
 }
 
 func New() Model {
@@ -111,7 +111,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			items[i] = searchItem{result: res}
 		}
 		m.list.SetItems(items)
-		m.statusMsg = fmt.Sprintf("Found %d results", len(msg.Results))
+		if len(items) > 0 {
+			m.list.Select(0)
+		}
+		m.statusMsg = fmt.Sprintf("Found %d results (Press Down/j to select, Enter to add)", len(msg.Results))
 
 	case tea.KeyMsg:
 		switch msg.String() {

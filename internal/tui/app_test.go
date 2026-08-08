@@ -10,6 +10,7 @@ import (
 	"github.com/dharuncs/novel/internal/source"
 	"github.com/dharuncs/novel/internal/storage"
 	"github.com/dharuncs/novel/internal/tui/reader"
+	"github.com/dharuncs/novel/internal/tui/search"
 	"github.com/dharuncs/novel/internal/tui/settings"
 )
 
@@ -338,6 +339,63 @@ func TestAppModelPersistence_SettingsRestart(t *testing.T) {
 	}
 	if restartedApp.userSettings.LineWidth != 100 {
 		t.Errorf("expected restarted app to load LineWidth 100, got %d", restartedApp.userSettings.LineWidth)
+	}
+}
+
+func TestSearchSelectionToLibraryAddPipeline(t *testing.T) {
+	db, app, _, _ := setupTestApp(t, "tui_test_search_pipeline.db")
+	defer db.Close()
+
+	// 1. Create a mock source plugin and register it
+	p := &source.Plugin{
+		Metadata: source.Metadata{
+			ID:      "src1",
+			Name:    "Source 1",
+			BaseURL: "https://example.com",
+		},
+	}
+	_ = app.registry.Add(p)
+
+	// 2. Press 's' to enter ViewSearch
+	updatedApp, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	appModel := updatedApp.(AppModel)
+	if appModel.state != ViewSearch {
+		t.Fatalf("expected ViewSearch state after pressing 's', got %v", appModel.state)
+	}
+
+	// 3. Inject SearchResultsMsg
+	searchResults := []source.SearchResult{
+		{Title: "Searched Novel 1", Author: "Author 1", URL: "https://example.com/novel-p1"},
+		{Title: "Searched Novel 2", Author: "Author 2", URL: "https://example.com/novel-p2"},
+	}
+	updatedApp, _ = appModel.Update(search.SearchResultsMsg{Results: searchResults})
+	appModel = updatedApp.(AppModel)
+
+	// 4. Blur search text input to move focus to list
+	appModel.searchModel, _ = appModel.searchModel.Update(search.SearchResultsMsg{})
+
+	// 5. Select item and dispatch AddNovelMsg
+	addMsg := search.AddNovelMsg{
+		SourceID:  "src1",
+		SourceURL: "https://example.com/novel-p1",
+	}
+
+	updatedApp, cmd := appModel.Update(addMsg)
+	appModel = updatedApp.(AppModel)
+
+	// 6. Assert app transitions to ViewLibrary immediately
+	if appModel.state != ViewLibrary {
+		t.Errorf("expected ViewLibrary state after AddNovelMsg, got %v", appModel.state)
+	}
+
+	if cmd == nil {
+		t.Fatalf("expected addNovelCmd execution")
+	}
+
+	// 7. Verify novel is in library DB directly
+	inLib, _, err := appModel.libraryManager.IsNovelInLibrary("src1", "https://example.com/novel-p1")
+	if err != nil || !inLib {
+		t.Errorf("expected novel to be in library, got inLib=%v, err=%v", inLib, err)
 	}
 }
 
