@@ -217,6 +217,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SwitchViewMsg:
 		m.state = msg.State
+		if m.state == ViewSearch {
+			m.refreshSearchPlugin()
+		}
 
 	case settings.SaveSettingsMsg:
 		m.userSettings = msg.Settings
@@ -324,12 +327,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "s":
 			if m.state == ViewLibrary {
-				if m.registry != nil {
-					if plugins := m.registry.List(); len(plugins) > 0 {
-						m.searchModel = m.searchModel.SetPlugin(plugins[0])
-					}
-				}
 				m.state = ViewSearch
+				m.refreshSearchPlugin()
 			}
 		case "c":
 			if m.state == ViewReader {
@@ -381,6 +380,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m *AppModel) refreshSearchPlugin() {
+	if m.registry != nil && m.searchModel.Plugin() == nil {
+		if plugins := m.registry.List(); len(plugins) > 0 {
+			m.searchModel = m.searchModel.SetPlugin(plugins[0])
+		}
+	}
 }
 
 func (m AppModel) View() string {

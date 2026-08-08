@@ -88,6 +88,10 @@ func (m Model) SetPlugin(p *source.Plugin) Model {
 	return m
 }
 
+func (m Model) Plugin() *source.Plugin {
+	return m.plugin
+}
+
 func (m Model) SetSize(width, height int) Model {
 	m.width = width
 	m.height = height

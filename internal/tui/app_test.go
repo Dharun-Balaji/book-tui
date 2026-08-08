@@ -399,6 +399,34 @@ func TestSearchSelectionToLibraryAddPipeline(t *testing.T) {
 	}
 }
 
+func TestSearchPluginDynamicResolutionOnEmptyRegistryStart(t *testing.T) {
+	db, app, _, _ := setupTestApp(t, "tui_test_empty_reg.db")
+	defer db.Close()
+
+	if app.searchModel.Plugin() != nil {
+		t.Fatalf("expected searchModel plugin to be nil initially")
+	}
+
+	p := &source.Plugin{
+		Metadata: source.Metadata{
+			ID:      "late_src",
+			Name:    "Late Source",
+			BaseURL: "https://example.com",
+		},
+	}
+	_ = app.registry.Add(p)
+
+	updatedApp, _ := app.Update(SwitchViewMsg{State: ViewSearch})
+	appModel := updatedApp.(AppModel)
+
+	if appModel.searchModel.Plugin() == nil {
+		t.Fatalf("expected searchModel plugin to be dynamically resolved after SwitchViewMsg")
+	}
+	if appModel.searchModel.Plugin().Metadata.ID != "late_src" {
+		t.Errorf("expected plugin ID 'late_src', got %q", appModel.searchModel.Plugin().Metadata.ID)
+	}
+}
+
 func TestAppModelWindowSizeHandling(t *testing.T) {
 	db, app, _, _ := setupTestApp(t, "tui_test_size.db")
 	defer db.Close()
