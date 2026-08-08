@@ -215,11 +215,11 @@ Files created: [`internal/storage/migrations/001_initial.sql`](./internal/storag
 | **2** | `source/engine.go` + `source/loader.go` — goja + Go `fetch` bridge | ✅ Complete; engine leak test passes |
 | **3** | `sources/novelfire.js` — first plugin and CLI harness | ✅ Implemented; live diagnostic reaches pages 1–14 |
 | **4** | `core/` — domain types + library/progress logic wired to storage | ✅ Complete & tested (4 unit tests passing) |
-| 5 | `tui/library/` — bare list view | ⬜ Not started |
-| 6 | `tui/reader/` — viewport, paragraph rendering, scrolling | ⬜ Not started |
-| 7 | Wire "continue reading" — position restore from DB | ⬜ Not started |
-| 8 | `tui/search/` — search a source, add to library | ⬜ Not started |
-| 9 | `tui/chapterlist/` — popup list, jump to chapter | ⬜ Not started |
+| **5** | `tui/library/` — bare list view | ✅ Complete (root AppModel + bare Library view) |
+| **6** | `tui/reader/` — viewport, paragraph rendering, scrolling | ✅ Complete & tested (auto-save + resize stability) |
+| **7** | Wire "continue reading" — position restore from DB | ✅ Complete (anchored paragraph seek on load) |
+| **8** | `tui/search/` — search a source, add to library | ✅ Complete & tested |
+| **9** | `tui/chapterlist/` — popup list, jump to chapter | ✅ Complete & tested |
 | 10 | `tui/settings/` + themes | ⬜ Not started |
 | 11 | Phase 2 features | ⬜ Not started |
 

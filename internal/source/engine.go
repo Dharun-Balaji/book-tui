@@ -21,6 +21,7 @@ type Plugin struct {
 	Metadata Metadata
 	script   string
 	client   *scraper.Client
+	OnProgress func(url string)
 }
 type execution struct {
 	source  goja.Value
@@ -128,6 +129,9 @@ func (plugin *Plugin) run(parent context.Context) (*execution, error) {
 		target := call.Argument(0).String()
 		if err := plugin.allowURL(target); err != nil {
 			panic(runtime.NewTypeError(err.Error()))
+		}
+		if plugin.OnProgress != nil {
+			plugin.OnProgress(target)
 		}
 		html, err := plugin.client.Fetch(ctx, plugin.Metadata.ID, plugin.Metadata.RateLimit, plugin.Metadata.BaseURL, target)
 		if err != nil {

@@ -15,6 +15,12 @@ func NewProgressManager(db *storage.DB) *ProgressManager {
 	return &ProgressManager{db: db}
 }
 
+type ResumeState struct {
+	Progress        *ReadingProgress `json:"progress"`
+	Chapter         *Chapter         `json:"chapter"`
+	IsNovelComplete bool             `json:"isNovelComplete"`
+}
+
 // SaveReadingState persists reading position and updates cumulative statistics.
 func (pm *ProgressManager) SaveReadingState(novelID, chapterID string, paragraphIdx, scrollOffset, totalParas int, additionalReadSec int64) error {
 	chapter, err := pm.db.GetChapter(chapterID)
@@ -36,7 +42,6 @@ func (pm *ProgressManager) SaveReadingState(novelID, chapterID string, paragraph
 	if currentProgress != nil {
 		totalSec = currentProgress.TotalReadSec + additionalReadSec
 		chaptersRead = currentProgress.ChaptersRead
-		// Increment chaptersRead if completed chapter (100%) and wasn't previously
 		if pct >= 1.0 && currentProgress.ProgressPct < 1.0 {
 			chaptersRead++
 		}
@@ -63,38 +68,43 @@ func (pm *ProgressManager) SaveReadingState(novelID, chapterID string, paragraph
 }
 
 // GetResumeState resolves where to "Continue Reading" for a given novel.
-// Returns (progress, targetChapter, error). If no progress exists, returns nil progress and chapter 1.
-func (pm *ProgressManager) GetResumeState(novelID string) (*ReadingProgress, *Chapter, error) {
+// Returns ResumeState containing progress, target chapter, and IsNovelComplete flag.
+func (pm *ProgressManager) GetResumeState(novelID string) (ResumeState, error) {
 	progress, err := pm.db.GetProgress(novelID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("query progress: %w", err)
+		return ResumeState{}, fmt.Errorf("query progress: %w", err)
 	}
 
 	chapters, err := pm.db.ListChapters(novelID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("list chapters: %w", err)
+		return ResumeState{}, fmt.Errorf("list chapters: %w", err)
 	}
 	if len(chapters) == 0 {
-		return nil, nil, fmt.Errorf("novel %s has no chapters", novelID)
+		return ResumeState{}, fmt.Errorf("novel %s has no chapters", novelID)
 	}
 
-	// No reading progress yet -> resume at first chapter
+	// Case 1: No reading progress yet -> resume at first chapter (not complete)
 	if progress == nil {
-		return nil, &chapters[0], nil
+		return ResumeState{Progress: nil, Chapter: &chapters[0], IsNovelComplete: false}, nil
 	}
 
-	// Find the exact saved chapter
+	// Case 2: Saved chapter exists
 	for i, ch := range chapters {
 		if ch.ID == progress.ChapterID {
-			// If chapter was 100% completed and there is a next chapter, suggest next chapter
-			if progress.ProgressPct >= 1.0 && i+1 < len(chapters) {
-				nextCh := chapters[i+1]
-				return progress, &nextCh, nil
+			if progress.ProgressPct >= 1.0 {
+				if i+1 < len(chapters) {
+					// Chapter complete, move to next chapter
+					nextCh := chapters[i+1]
+					return ResumeState{Progress: progress, Chapter: &nextCh, IsNovelComplete: false}, nil
+				}
+				// Last chapter complete -> novel complete!
+				return ResumeState{Progress: progress, Chapter: &ch, IsNovelComplete: true}, nil
 			}
-			return progress, &ch, nil
+			// In the middle of this chapter
+			return ResumeState{Progress: progress, Chapter: &ch, IsNovelComplete: false}, nil
 		}
 	}
 
-	// Fallback if saved chapter ID not found
-	return progress, &chapters[0], nil
+	// Fallback if saved chapter ID was removed or not found
+	return ResumeState{Progress: progress, Chapter: &chapters[0], IsNovelComplete: false}, nil
 }

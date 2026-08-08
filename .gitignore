@@ -1,0 +1,15 @@
+# Binaries
+novel
+*.exe
+*.exe;
+*.dll
+*.so
+*.dylib
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Test / Scratch
+scratch/

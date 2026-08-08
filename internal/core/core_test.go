@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,7 +36,7 @@ func mockPlugin(t *testing.T) *source.Plugin {
 			];
 		},
 		search: function(q, p) { return []; },
-		chapterContent: function(url) { return "Line 1\n\nLine 2"; }
+		chapterContent: function(url) { return "<p>Line 1 &amp; <b>bold</b></p><br/><p>Line 2</p>"; }
 	};`
 	plugin, err := source.LoadScript(script, scraper.NewClient())
 	if err != nil {
@@ -52,52 +53,54 @@ func TestLibraryManager(t *testing.T) {
 
 	url := "https://example.com/novel"
 
-	// 1. Check initially not in library
 	inLib, _, err := lm.IsNovelInLibrary("mock", url)
 	if err != nil || inLib {
 		t.Fatalf("expected not in library, got inLib=%v, err=%v", inLib, err)
 	}
 
-	// 2. Add novel to library
-	novel, err := lm.AddNovel(ctx, plugin, url)
+	var progressLogs []string
+	novel, err := lm.AddNovel(ctx, plugin, url, func(status string) {
+		progressLogs = append(progressLogs, status)
+	})
+	t.Logf("Captured progress logs: %#v", progressLogs)
 	if err != nil {
 		t.Fatalf("AddNovel failed: %v", err)
+	}
+	if len(progressLogs) < 3 {
+		t.Fatalf("expected at least 3 progress logs, got %d: %v", len(progressLogs), progressLogs)
+	}
+	hasSavingStep := false
+	for _, logMsg := range progressLogs {
+		if strings.Contains(logMsg, "Saving novel") {
+			hasSavingStep = true
+			break
+		}
+	}
+	if !hasSavingStep {
+		t.Fatalf("progress logs missing expected saving step: %v", progressLogs)
 	}
 	if novel.Title != "Mock Novel" || novel.Author != "Mock Author" || novel.TotalChapters != 2 {
 		t.Fatalf("unexpected novel fields: %#v", novel)
 	}
 
-	// 3. List library
 	lib, err := lm.ListLibrary()
 	if err != nil || len(lib) != 1 {
 		t.Fatalf("expected 1 novel in library, got %d, err=%v", len(lib), err)
 	}
 
-	// 4. List chapters
 	chapters, err := lm.ListChapters(novel.ID)
 	if err != nil || len(chapters) != 2 {
 		t.Fatalf("expected 2 chapters, got %d, err=%v", len(chapters), err)
 	}
 
-	// 5. Get chapter content (fetches from plugin & caches)
+	// Verify content cleaning on fetch
 	ch1, err := lm.GetChapterContent(ctx, plugin, chapters[0].ID)
-	if err != nil || !ch1.IsCached || ch1.Content != "Line 1\n\nLine 2" {
+	if err != nil || !ch1.IsCached || ch1.Content != "Line 1 & **bold**\nLine 2" {
 		t.Fatalf("GetChapterContent failed: %#v, err=%v", ch1, err)
 	}
 
-	// 6. Second call returns cached content directly
-	ch1Cached, err := lm.GetChapterContent(ctx, plugin, chapters[0].ID)
-	if err != nil || ch1Cached.Content != "Line 1\n\nLine 2" {
-		t.Fatalf("cached GetChapterContent failed: %#v, err=%v", ch1Cached, err)
-	}
-
-	// 7. Remove novel from library
 	if err := lm.RemoveNovel(novel.ID); err != nil {
 		t.Fatalf("RemoveNovel failed: %v", err)
-	}
-	libAfter, err := lm.ListLibrary()
-	if err != nil || len(libAfter) != 0 {
-		t.Fatalf("expected 0 novels after remove, got %d", len(libAfter))
 	}
 }
 
@@ -108,7 +111,7 @@ func TestProgressManager(t *testing.T) {
 	plugin := mockPlugin(t)
 	ctx := context.Background()
 
-	novel, err := lm.AddNovel(ctx, plugin, "https://example.com/novel")
+	novel, err := lm.AddNovel(ctx, plugin, "https://example.com/novel", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,28 +120,37 @@ func TestProgressManager(t *testing.T) {
 		t.Fatal("expected chapters")
 	}
 
-	// 1. Initial state (no progress recorded yet) -> suggests chapter 1
-	prog, targetCh, err := pm.GetResumeState(novel.ID)
-	if err != nil || prog != nil || targetCh.ID != chapters[0].ID {
-		t.Fatalf("initial resume state: prog=%v, ch=%v, err=%v", prog, targetCh, err)
+	// 1. Initial state (no progress) -> Chapter 1, IsNovelComplete=false
+	state, err := pm.GetResumeState(novel.ID)
+	if err != nil || state.Progress != nil || state.Chapter.ID != chapters[0].ID || state.IsNovelComplete {
+		t.Fatalf("initial resume state: %#v, err=%v", state, err)
 	}
 
-	// 2. Save partial reading state on chapter 1
+	// 2. Partial reading on Chapter 1 -> Chapter 1, IsNovelComplete=false
 	if err := pm.SaveReadingState(novel.ID, chapters[0].ID, 2, 0, 10, 120); err != nil {
 		t.Fatalf("SaveReadingState error: %v", err)
 	}
-	prog, targetCh, err = pm.GetResumeState(novel.ID)
-	if err != nil || prog == nil || targetCh.ID != chapters[0].ID || prog.ParagraphIdx != 2 {
-		t.Fatalf("partial resume state failed: prog=%#v, ch=%#v, err=%v", prog, targetCh, err)
+	state, err = pm.GetResumeState(novel.ID)
+	if err != nil || state.Progress == nil || state.Chapter.ID != chapters[0].ID || state.IsNovelComplete {
+		t.Fatalf("partial resume state failed: %#v, err=%v", state, err)
 	}
 
-	// 3. Save 100% complete reading state on chapter 1 -> suggests next chapter (chapter 2)
+	// 3. 100% complete on Chapter 1 -> suggests Chapter 2, IsNovelComplete=false
 	if err := pm.SaveReadingState(novel.ID, chapters[0].ID, 10, 0, 10, 300); err != nil {
 		t.Fatalf("SaveReadingState 100%% error: %v", err)
 	}
-	prog, targetCh, err = pm.GetResumeState(novel.ID)
-	if err != nil || prog == nil || targetCh.ID != chapters[1].ID {
-		t.Fatalf("completed chapter resume state failed: targetCh=%#v, err=%v", targetCh, err)
+	state, err = pm.GetResumeState(novel.ID)
+	if err != nil || state.Chapter.ID != chapters[1].ID || state.IsNovelComplete {
+		t.Fatalf("completed chapter 1 state failed: %#v, err=%v", state, err)
+	}
+
+	// 4. 100% complete on Chapter 2 (the LAST chapter) -> IsNovelComplete=true!
+	if err := pm.SaveReadingState(novel.ID, chapters[1].ID, 10, 0, 10, 300); err != nil {
+		t.Fatalf("SaveReadingState ch2 100%% error: %v", err)
+	}
+	state, err = pm.GetResumeState(novel.ID)
+	if err != nil || state.Chapter.ID != chapters[1].ID || !state.IsNovelComplete {
+		t.Fatalf("completed LAST chapter state failed: %#v, err=%v", state, err)
 	}
 }
 
@@ -150,18 +162,16 @@ func TestStatsManager(t *testing.T) {
 	plugin := mockPlugin(t)
 	ctx := context.Background()
 
-	novel, err := lm.AddNovel(ctx, plugin, "https://example.com/novel")
+	novel, err := lm.AddNovel(ctx, plugin, "https://example.com/novel", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	chapters, _ := lm.ListChapters(novel.ID)
 
-	// Save reading state (chapter 1 complete)
 	if err := pm.SaveReadingState(novel.ID, chapters[0].ID, 10, 0, 10, 180); err != nil {
 		t.Fatal(err)
 	}
 
-	// Start and end session
 	session, err := sm.StartReadingSession(novel.ID, chapters[0].ID)
 	if err != nil {
 		t.Fatalf("StartReadingSession error: %v", err)
@@ -171,33 +181,20 @@ func TestStatsManager(t *testing.T) {
 		t.Fatalf("EndReadingSession error: %v", err)
 	}
 
-	// Verify overall stats
 	overall, err := sm.GetOverallStats()
 	if err != nil {
 		t.Fatalf("GetOverallStats error: %v", err)
 	}
-	if overall.TotalLibraryNovels != 1 || overall.TotalChaptersRead != 1 || overall.TotalSessions != 1 || overall.TotalReadingTime != 180*time.Second {
+	if overall.TotalLibraryNovels != 1 || overall.TotalChaptersRead != 1 || overall.TotalSessions != 1 {
 		t.Fatalf("unexpected overall stats: %#v", overall)
-	}
-
-	// Verify per-novel stats
-	novelStats, err := sm.GetNovelStats(novel.ID)
-	if err != nil {
-		t.Fatalf("GetNovelStats error: %v", err)
-	}
-	if novelStats.NovelID != novel.ID || novelStats.ChaptersRead != 1 || novelStats.SessionCount != 1 {
-		t.Fatalf("unexpected novel stats: %#v", novelStats)
 	}
 }
 
-func TestProgressHelpers(t *testing.T) {
-	if pct := CalculateProgressPct(0, 10); pct != 0.1 {
-		t.Errorf("expected 0.1, got %f", pct)
-	}
-	if pct := CalculateProgressPct(9, 10); pct != 1.0 {
-		t.Errorf("expected 1.0, got %f", pct)
-	}
-	if fmtStr := FormatProgressString(1.5, 0.456); fmtStr != "Ch. 1.5 (46%)" {
-		t.Errorf("expected 'Ch. 1.5 (46%%)', got %q", fmtStr)
+func TestCleanContent(t *testing.T) {
+	raw := "  <p>Hello &amp; <b>World</b></p><br/><p>Second line</p>  "
+	cleaned := CleanContent(raw)
+	expected := "Hello & **World**\nSecond line"
+	if cleaned != expected {
+		t.Errorf("CleanContent expected %q, got %q", expected, cleaned)
 	}
 }

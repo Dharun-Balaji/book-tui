@@ -13,3 +13,10 @@ func (r *Registry) Add(p *Plugin) error {
 	return nil
 }
 func (r *Registry) Get(id string) (*Plugin, bool) { p, ok := r.plugins[id]; return p, ok }
+func (r *Registry) List() []*Plugin {
+	list := make([]*Plugin, 0, len(r.plugins))
+	for _, p := range r.plugins {
+		list = append(list, p)
+	}
+	return list
+}

@@ -32,8 +32,31 @@ func (lm *LibraryManager) IsNovelInLibrary(sourceID, sourceURL string) (bool, *N
 	return false, nil, nil
 }
 
+type ProgressCallback func(status string)
+
 // AddNovel fetches novel info & chapter list from a source plugin, persists it to storage, and flags it in library.
-func (lm *LibraryManager) AddNovel(ctx context.Context, plugin *source.Plugin, sourceNovelURL string) (Novel, error) {
+func (lm *LibraryManager) AddNovel(ctx context.Context, plugin *source.Plugin, sourceNovelURL string, onProgress ProgressCallback) (Novel, error) {
+	report := func(msg string) {
+		if onProgress != nil {
+			onProgress(msg)
+		}
+	}
+
+	plugin.OnProgress = func(targetURL string) {
+		if strings.Contains(targetURL, "page=") {
+			parts := strings.Split(targetURL, "page=")
+			if len(parts) > 1 {
+				page := strings.Split(parts[1], "&")[0]
+				report(fmt.Sprintf("Fetching chapter list page %s...", page))
+				return
+			}
+		}
+		report("Fetching metadata from source...")
+	}
+	defer func() { plugin.OnProgress = nil }()
+
+	report("Updating source metadata...")
+
 	// Upsert source metadata to DB first
 	meta := plugin.Metadata
 	if err := lm.db.UpsertSource(storage.Source{
@@ -57,17 +80,21 @@ func (lm *LibraryManager) AddNovel(ctx context.Context, plugin *source.Plugin, s
 		return *existing, nil
 	}
 
+	report("Fetching novel metadata...")
 	// Fetch novel metadata from plugin
 	sNovel, err := plugin.NovelInfo(ctx, sourceNovelURL)
 	if err != nil {
 		return Novel{}, fmt.Errorf("fetch novel info: %w", err)
 	}
 
+	report("Fetching chapter list...")
 	// Fetch chapter list from plugin
 	sChapters, err := plugin.ChapterList(ctx, sourceNovelURL)
 	if err != nil {
 		return Novel{}, fmt.Errorf("fetch chapter list: %w", err)
 	}
+
+	report(fmt.Sprintf("Saving novel and %d chapters to library...", len(sChapters)))
 
 	novel := FromSourceNovel(meta.ID, sNovel)
 	novel.TotalChapters = len(sChapters)
@@ -138,11 +165,12 @@ func (lm *LibraryManager) GetChapterContent(ctx context.Context, plugin *source.
 	}
 
 	// Fetch chapter content from plugin
-	content, err := plugin.ChapterContent(ctx, chapter.SourceURL)
+	rawContent, err := plugin.ChapterContent(ctx, chapter.SourceURL)
 	if err != nil {
 		return Chapter{}, fmt.Errorf("fetch chapter content: %w", err)
 	}
 
+	content := CleanContent(rawContent)
 	now := time.Now().UTC()
 	words := len(strings.Fields(content))
 

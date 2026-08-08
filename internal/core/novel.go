@@ -2,11 +2,20 @@ package core
 
 import (
 	"fmt"
+	"html"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/dharuncs/novel/internal/source"
 	"github.com/dharuncs/novel/internal/storage"
 	"github.com/google/uuid"
+)
+
+var (
+	regexpBold    = regexp.MustCompile(`(?i)<(?:b|strong)>(.*?)</(?:b|strong)>`)
+	regexpItalic  = regexp.MustCompile(`(?i)<(?:i|em)>(.*?)</(?:i|em)>`)
+	regexpHTMLTag = regexp.MustCompile(`<[^>]*>`)
 )
 
 // Type aliases for core domain models to avoid redundant mapping duplication.
@@ -48,6 +57,41 @@ func FromSourceChapter(novelID string, sChapter source.Chapter) Chapter {
 		Content:   "",
 		IsCached:  false,
 	}
+}
+
+// CleanContent strips residual HTML tags, unescapes HTML entities, and normalizes line breaks.
+func CleanContent(rawHTML string) string {
+	// 1. Unescape HTML entities (&quot;, &amp;, &lt;, &gt;, &#39;, &nbsp;, etc.)
+	str := html.UnescapeString(rawHTML)
+	str = strings.ReplaceAll(str, "\u00a0", " ") // Non-breaking space
+
+	// 2. Replace formatting HTML tags with simple markdown equivalents
+	str = strings.ReplaceAll(str, "<br>", "\n")
+	str = strings.ReplaceAll(str, "<br/>", "\n")
+	str = strings.ReplaceAll(str, "<br />", "\n")
+	str = regexpBold.ReplaceAllString(str, "**$1**")
+	str = regexpItalic.ReplaceAllString(str, "*$1*")
+
+	// 3. Strip any remaining HTML tags
+	str = regexpHTMLTag.ReplaceAllString(str, "")
+
+	// 4. Normalize multiple consecutive blank lines to double newlines (\n\n)
+	lines := strings.Split(str, "\n")
+	var cleaned []string
+	blank := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if !blank && len(cleaned) > 0 {
+				cleaned = append(cleaned, "")
+				blank = true
+			}
+		} else {
+			cleaned = append(cleaned, trimmed)
+			blank = false
+		}
+	}
+	return strings.Join(cleaned, "\n")
 }
 
 // CalculateProgressPct computes reading percentage for a given paragraph index.

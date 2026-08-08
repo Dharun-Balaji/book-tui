@@ -534,10 +534,10 @@ Background work (goroutines → tea.Cmd):
 2. `source/engine.go` + `source/loader.go` — goja runtime + Go `fetch` bridge ✅
 3. `sources/novelfire.js` — first plugin, test with `novel source test novelfire` ✅
 4. `core/` — domain types + library/progress logic wired to storage ✅
-5. `tui/library/` — bare list view, just shows novels in DB
-6. `tui/reader/` — viewport, paragraph rendering, j/k/g/G scrolling
-7. Wire "continue reading" — open novel → restore position from DB
-8. `tui/search/` — search a source, add to library
-9. `tui/chapterlist/` — popup list, jump to chapter
+5. `tui/library/` — bare list view, just shows novels in DB ✅
+6. `tui/reader/` — viewport, paragraph rendering, j/k/g/G scrolling ✅
+7. Wire "continue reading" — open novel → restore position from DB ✅
+8. `tui/search/` — search a source, add to library ✅
+9. `tui/chapterlist/` — popup list, jump to chapter ✅
 10. `tui/settings/` + themes
 11. Phase 2 features...
