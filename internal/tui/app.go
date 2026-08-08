@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/dharuncs/novel/internal/core"
 	"github.com/dharuncs/novel/internal/source"
 	"github.com/dharuncs/novel/internal/storage"
@@ -391,18 +392,28 @@ func (m *AppModel) refreshSearchPlugin() {
 }
 
 func (m AppModel) View() string {
+	var body string
 	switch m.state {
 	case ViewLibrary:
-		return m.libraryModel.View()
+		body = m.libraryModel.View()
 	case ViewReader:
-		return m.readerModel.View()
+		body = m.readerModel.View()
 	case ViewSearch:
-		return m.searchModel.View()
+		body = m.searchModel.View()
 	case ViewChapterList:
-		return m.chapterListModel.View()
+		body = m.chapterListModel.View()
 	case ViewSettings:
-		return m.settingsModel.View()
+		body = m.settingsModel.View()
 	default:
-		return "Unknown view"
+		body = "Unknown view"
 	}
+
+	if m.statusMsg != "" {
+		statusStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("205")).
+			Bold(true).
+			Padding(0, 1)
+		body = lipgloss.JoinVertical(lipgloss.Left, body, statusStyle.Render("[STATUS] "+m.statusMsg))
+	}
+	return body
 }

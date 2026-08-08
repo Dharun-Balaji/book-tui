@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -424,6 +425,18 @@ func TestSearchPluginDynamicResolutionOnEmptyRegistryStart(t *testing.T) {
 	}
 	if appModel.searchModel.Plugin().Metadata.ID != "late_src" {
 		t.Errorf("expected plugin ID 'late_src', got %q", appModel.searchModel.Plugin().Metadata.ID)
+	}
+}
+
+func TestAppModelViewDisplaysProgressStatusFooter(t *testing.T) {
+	db, app, _, _ := setupTestApp(t, "tui_test_status_footer.db")
+	defer db.Close()
+
+	app.statusMsg = "Fetching chapter list page 1..."
+	view := app.View()
+
+	if !strings.Contains(view, "[STATUS] Fetching chapter list page 1...") {
+		t.Fatalf("expected View() output to contain status footer message, got:\n%s", view)
 	}
 }
 

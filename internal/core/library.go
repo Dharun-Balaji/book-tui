@@ -171,6 +171,10 @@ func (lm *LibraryManager) GetChapterContent(ctx context.Context, plugin *source.
 	}
 
 	content := CleanContent(rawContent)
+	if strings.TrimSpace(content) == "" {
+		return Chapter{}, fmt.Errorf("fetched chapter content is empty")
+	}
+
 	now := time.Now().UTC()
 	words := len(strings.Fields(content))
 

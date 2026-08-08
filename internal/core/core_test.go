@@ -198,3 +198,67 @@ func TestCleanContent(t *testing.T) {
 		t.Errorf("CleanContent expected %q, got %q", expected, cleaned)
 	}
 }
+
+func TestGetChapterContent_DoNotCacheEmptyContent(t *testing.T) {
+	db := testCoreDB(t)
+	lm := NewLibraryManager(db)
+	now := time.Now().UTC()
+
+	_ = db.UpsertSource(storage.Source{
+		ID:        "src1",
+		Name:      "Src",
+		Version:   "1.0",
+		BaseURL:   "https://example.com",
+		Language:  "en",
+		RateLimit: 60,
+	})
+
+	novel := Novel{
+		ID:        "n1",
+		SourceID:  "src1",
+		SourceURL: "https://example.com/novel",
+		Title:     "Test Novel",
+		Status:    "ongoing",
+		AddedAt:   now,
+		UpdatedAt: now,
+	}
+	if err := db.CreateNovel(novel); err != nil {
+		t.Fatal(err)
+	}
+
+	chStub := Chapter{
+		ID:        "c1",
+		NovelID:   "n1",
+		SourceURL: "https://example.com/ch1",
+		Number:    1.0,
+		Title:     "Chapter 1",
+	}
+	if err := db.CreateChapter(chStub); err != nil {
+		t.Fatal(err)
+	}
+
+	script := `const source = {
+		id: "src1", name: "Src", version: "1.0", baseURL: "https://example.com", language: "en", rateLimit: 60, needsJS: false,
+		novelInfo: function(url) { return {}; },
+		chapterList: function(url) { return []; },
+		search: function(q, p) { return []; },
+		chapterContent: function(url) { return ""; }
+	};`
+	emptyPlugin, err := source.LoadScript(script, scraper.NewClient())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = lm.GetChapterContent(context.Background(), emptyPlugin, "c1")
+	if err == nil {
+		t.Fatalf("expected error when fetching empty chapter content")
+	}
+
+	dbCh, err := db.GetChapter("c1")
+	if err != nil {
+		t.Fatalf("failed to query DB for chapter: %v", err)
+	}
+	if dbCh.IsCached {
+		t.Errorf("expected IsCached to remain false when content is empty, got true")
+	}
+}
