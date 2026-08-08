@@ -3,6 +3,15 @@
 > **Stack**: Go + Bubble Tea · **Plugin Engine**: JS via `goja` · **Storage**: SQLite  
 > **Target**: Linux primary, SSH-compatible, single binary + `sources/` directory
 
+## Current Implementation Status
+
+- Storage, migrations, CRUD, and six temp-file SQLite tests are complete.
+- The goja engine, loader, registry, scraper client, and HTML selector bridge are complete.
+- The engine uses a 30-second fetch-idle watchdog plus a five-minute outer ceiling; cleanup is covered by a goroutine test.
+- `sources/novelfire.js` is the first implemented plugin; its CLI harness is `novel source test novelfire --url=...`.
+- Live diagnostics reached Novelfire pages 1–14 (100 chapters per page, HTTP 200); the external command window ended before page 15.
+- `internal/core/`, TUI packages, config, Royal Road, and bookmark CRUD remain unimplemented.
+
 ---
 
 ## 1. Language & Framework Validation
@@ -65,10 +74,7 @@ novel/
 │       ├── config.go
 │       └── defaults.go
 ├── sources/            # Shipped JS plugin files (one per site)
-│   ├── royalroad.js
-│   ├── novelbin.js
-│   ├── lightnovelpub.js
-│   └── novelfire.js    # needsJS: false — plain HTTP + browser headers sufficient
+│   └── novelfire.js    # first plugin; needsJS: false
 ├── go.mod
 ├── go.sum
 └── README.md
@@ -306,7 +312,7 @@ startup
 > Goal: a working reader you'd actually use daily.
 
 - [ ] **Storage layer** — SQLite schema, migrations, all CRUD
-- [ ] **Plugin engine** — `goja` loader, Go bridge (`fetch`), one working source (RoyalRoad)
+- [x] **Plugin engine** — `goja` loader, Go bridge (`fetch`), one working source (Novelfire)
 - [ ] **Library view** — list of tracked novels, basic add/remove
 - [ ] **Reader view** — paginated/scrollable chapter text, line width config
 - [ ] **Continue Reading** — paragraph-anchored position save/restore
@@ -444,7 +450,7 @@ novel/
 │   │   ├── db.go                 # Open DB, run migrations
 │   │   ├── migrations/
 │   │   │   ├── 001_initial.sql
-│   │   │   └── 002_bookmarks.sql
+│   │   │   └── 002_indexes.sql
 │   │   ├── novels.go             # Novel CRUD
 │   │   ├── chapters.go           # Chapter CRUD + cache check
 │   │   ├── progress.go           # ReadingProgress queries
@@ -469,9 +475,6 @@ novel/
 │       └── defaults.go           # Sensible defaults
 │
 ├── sources/                      # JS plugin files — shipped with binary
-│   ├── royalroad.js
-│   ├── novelbin.js
-│   ├── lightnovelpub.js
 │   └── novelfire.js              # needsJS: false (plain HTTP + browser headers)
 │
 ├── go.mod
@@ -491,7 +494,7 @@ github.com/PuerkitoBio/goquery            # jQuery-like HTML parsing (used in Go
 modernc.org/sqlite                        # Pure-Go SQLite driver
 github.com/spf13/cobra                    # CLI command routing
 github.com/BurntSushi/toml                # Config file parsing
-github.com/chromedp/chromedp              # Headless browser (optional, lazy import)
+# chromedp is intentionally deferred until Phase 3
 github.com/sahilm/fuzzy                   # Fuzzy search in library
 ```
 
@@ -527,10 +530,10 @@ Background work (goroutines → tea.Cmd):
 
 > Build in this order to get a working app as fast as possible.
 
-1. `storage/` — DB schema + migrations + all CRUD (testable without TUI)
-2. `source/engine.go` + `source/loader.go` — goja runtime + Go `fetch` bridge
-3. `sources/royalroad.js` — first plugin, test with `novel source test royalroad`
-4. `core/` — domain types + library/progress logic wired to storage
+1. `storage/` — DB schema + migrations + all CRUD ✅
+2. `source/engine.go` + `source/loader.go` — goja runtime + Go `fetch` bridge ✅
+3. `sources/novelfire.js` — first plugin, test with `novel source test novelfire` ✅
+4. `core/` — domain types + library/progress logic wired to storage ✅
 5. `tui/library/` — bare list view, just shows novels in DB
 6. `tui/reader/` — viewport, paragraph rendering, j/k/g/G scrolling
 7. Wire "continue reading" — open novel → restore position from DB

@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -96,7 +97,21 @@ func (plugin *Plugin) call(ctx context.Context, method string, output any, argum
 	if err != nil {
 		return fmt.Errorf("%s: %w", method, err)
 	}
-	if err := runtime.ExportTo(result, output); err != nil {
+	exported := result.Export()
+	if exported == nil {
+		return nil
+	}
+	if strPtr, ok := output.(*string); ok {
+		if str, ok := exported.(string); ok {
+			*strPtr = str
+			return nil
+		}
+	}
+	data, err := json.Marshal(exported)
+	if err != nil {
+		return fmt.Errorf("marshal %s result: %w", method, err)
+	}
+	if err := json.Unmarshal(data, output); err != nil {
 		return fmt.Errorf("decode %s result: %w", method, err)
 	}
 	return nil
@@ -138,6 +153,7 @@ func (plugin *Plugin) run(parent context.Context) (*execution, error) {
 		}
 		return matches, nil
 	})
+	runtime.Set("log", func(args ...any) { fmt.Println(args...) })
 	done := make(chan struct{})
 	go func() {
 		select {

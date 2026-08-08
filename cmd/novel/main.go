@@ -13,7 +13,9 @@ func main() {
 	var url, sources string
 	root := &cobra.Command{Use: "novel"}
 	test := &cobra.Command{Use: "test novelfire", RunE: func(_ *cobra.Command, _ []string) error {
-		registry, err := source.LoadDir(sources, scraper.NewClient())
+		client := scraper.NewClient()
+		client.Debugf = func(format string, args ...any) { fmt.Printf("DEBUG "+format+"\n", args...) }
+		registry, err := source.LoadDir(sources, client)
 		if err != nil {
 			return err
 		}

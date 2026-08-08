@@ -13,7 +13,7 @@
 | **Goal** | Feature-rich, lightweight, fast terminal-based novel/light-novel reader |
 | **Inspiration** | LNReader (Android) — source-plugin system, library management, reading UX |
 | **Target user** | Single local user; SSH-compatible terminal |
-| **Current phase** | Storage layer complete and tested; source engine is next (§7 build sequence) |
+| **Current phase** | Steps 1–2 complete; Novelfire diagnostic complete; core layer is next |
 
 ---
 
@@ -41,7 +41,7 @@
 - **Engine**: `goja` isolated runtime per plugin; sandboxed (no filesystem, no `require()`, no raw network)
 - **Go bridge**: plugins call `fetch(url)` → Go's `scraper/client.go` (rate limiter, retry, header injection, caching) → HTML string back to JS
 - **Domain allowlist**: `fetch()` enforces plugin can only fetch from its declared `baseURL`
-- **Timeout**: 30s execution timeout per plugin call
+- **Timeout**: 30s idle timeout reset after successful fetches plus a 5-minute outer ceiling; errors distinguish idle from outer timeout
 - **Plugin spec**: each `.js` file exports a `source` object with: `id`, `name`, `version`, `baseURL`, `language`, `rateLimit`, `needsJS`, and methods `search()`, `novelInfo()`, `chapterList()`, `chapterContent()`
 - **Test subcommand**: `novel source test <id>` runs a fixed URL through the plugin and validates output schema
 
@@ -65,10 +65,10 @@
 
 | Plugin file | Site | `needsJS` | Notes |
 |---|---|---|---|
-| `royalroad.js` | royalroad.com | `false` | **MVP — first plugin to build** |
+| `royalroad.js` | royalroad.com | `false` | Second plugin; not started |
 | `novelbin.js` | novelbin.com | `false` | Phase 2 |
 | `lightnovelpub.js` | lightnovelpub.com | `false` | Phase 2 |
-| `novelfire.js` | novelfire.net | **`false`** | Phase 2; see verified finding below |
+| `novelfire.js` | novelfire.net | **`false`** | **MVP — first plugin; implemented** |
 
 ### novelfire.net — Verified Finding (2026-08-08)
 - **Prior assumption (wrong)**: flagged `needsJS: true` based on a 403 response from a headerless `read_url_content` fetch
@@ -77,6 +77,7 @@
 - **Cloudflare beacon**: page includes a passive `__cf_chl` telemetry `<script>` tag — this is **not** a JS challenge gate
 - **Conclusion**: `novelfire.js` sets `needsJS: false`, `rateLimit: 30`. The shared `client.go` global browser-header defaults handle it entirely. No `chromedp` needed for this source
 - **Implication**: `chromedp` headless fallback stays in Phase 3 (not pulled forward to Phase 2)
+- **Live diagnostic**: the provided Lord of the Mysteries URL returns HTTP 200; pages 1–14 each return 100 chapters. The external command window ended before page 15.
 
 ---
 
@@ -200,7 +201,7 @@ Files created: [`internal/storage/migrations/001_initial.sql`](./internal/storag
 
 | # | Question | Impact | Status |
 |---|---|---|---|
-| 1 | **Binary / app name**: use `novel` or something else? | Affects `go.mod` module path, binary name, install path | ❓ Not answered |
+| 1 | **Binary / app name**: use `novel` or something else? | Affects `go.mod` module path, binary name, install path | ✅ `novel`; module is `github.com/dharuncs/novel` |
 | 2 | **`novel_tags` vs comma-separated `tags TEXT`**: normalized table is cleaner for queries; comma-separated is simpler CRUD. | Normalized `novel_tags` retained for future library filtering. | ✅ Confirmed |
 | 3 | **`sources` table in DB vs in-memory only**: persisting to DB enables future per-source state. | `sources` retained; startup will upsert loaded plugin metadata by source ID. | ✅ Confirmed |
 
@@ -210,10 +211,10 @@ Files created: [`internal/storage/migrations/001_initial.sql`](./internal/storag
 
 | Step | What | Status |
 |---|---|---|
-| **1** | `storage/` — SQLite schema, migrations, all CRUD | ✅ Complete; temp-file SQLite CRUD tests pass |
-| 2 | `source/engine.go` + `source/loader.go` — goja + Go `fetch` bridge | 🟡 Next; not started |
-| 3 | `sources/royalroad.js` — first plugin | ⬜ Not started |
-| 4 | `core/` — domain types + library/progress logic wired to storage | ⬜ Not started |
+| **1** | `storage/` — SQLite schema, migrations, all CRUD | ✅ Complete; six temp-file SQLite tests pass |
+| **2** | `source/engine.go` + `source/loader.go` — goja + Go `fetch` bridge | ✅ Complete; engine leak test passes |
+| **3** | `sources/novelfire.js` — first plugin and CLI harness | ✅ Implemented; live diagnostic reaches pages 1–14 |
+| **4** | `core/` — domain types + library/progress logic wired to storage | ✅ Complete & tested (4 unit tests passing) |
 | 5 | `tui/library/` — bare list view | ⬜ Not started |
 | 6 | `tui/reader/` — viewport, paragraph rendering, scrolling | ⬜ Not started |
 | 7 | Wire "continue reading" — position restore from DB | ⬜ Not started |
@@ -233,6 +234,7 @@ Files created: [`internal/storage/migrations/001_initial.sql`](./internal/storag
 | `plan.md` | ✅ Written and up to date |
 | `internal/storage/migrations/` | ✅ Created with 001 + 002 |
 | `go.mod` | ✅ Initialized as `github.com/dharuncs/novel`; core dependencies installed (no `chromedp`) |
+| Git checkpoint | ✅ Root commit `af02d27`; later diagnostic logging changes are uncommitted |
 
 ---
 

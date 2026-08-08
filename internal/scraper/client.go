@@ -15,6 +15,7 @@ type Client struct {
 	httpClient *http.Client
 	mu         sync.Mutex
 	next       map[string]time.Time
+	Debugf     func(string, ...any)
 }
 
 func NewClient() *Client {

@@ -11,18 +11,28 @@ type Metadata struct {
 }
 
 type Novel struct {
-	URL, Title, Author, CoverURL, Description, Status string
-	Tags                                              []string
-	TotalChapters                                     int
+	URL           string   `json:"url"`
+	Title         string   `json:"title"`
+	Author        string   `json:"author"`
+	CoverURL      string   `json:"coverURL"`
+	Description   string   `json:"description"`
+	Status        string   `json:"status"`
+	Tags          []string `json:"tags"`
+	TotalChapters int      `json:"totalChapters"`
 }
 
 type Chapter struct {
-	URL, Title string
-	Number     float64
+	URL    string  `json:"url"`
+	Title  string  `json:"title"`
+	Number float64 `json:"number"`
 }
 
 type SearchResult struct {
-	URL, Title, Author, CoverURL, Status string
+	URL      string `json:"url"`
+	Title    string `json:"title"`
+	Author   string `json:"author"`
+	CoverURL string `json:"coverURL"`
+	Status   string `json:"status"`
 }
 
 type SelectorMatch struct {
